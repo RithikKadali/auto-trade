@@ -1,0 +1,67 @@
+//@version=5
+indicator(title="To Check volatility High/Low Volume", shorttitle="HL-Vol", format=format.volume)
+
+
+////////////
+// INPUTS //
+
+
+type = input.string("Percentile", title = "Type", options = ["Percentile", "Sigma"])
+
+
+length = input(200, 'Lookback Period')
+
+
+plow  = input(70, 'Percentile low:',  group = "Percentile")
+phigh = input(97, 'Percentile high:', group = "Percentile")
+
+
+sigmas = input(2, 'Sigmas',  group = "Sigmas")
+
+
+//////////////////
+// CALCULATIONS //
+
+
+perc_high = ta.percentile_linear_interpolation(volume, length, phigh)
+perc_low  = ta.percentile_linear_interpolation(volume, length, plow)
+
+
+sigma_high = ta.sma(volume, length) + sigmas * ta.stdev(volume, length)
+sigma_low  = ta.sma(volume, length) - sigmas * ta.stdev(volume, length)
+
+
+vol_low_level  = type == 'Percentile' ? perc_low  : sigma_low
+vol_high_level = type == 'Percentile' ? perc_high : sigma_high
+
+
+vol_is_high = volume > vol_high_level
+vol_is_low  = volume < vol_low_level
+
+
+////////////
+/// PLOTS //
+
+
+palette = vol_is_high ? color.green : vol_is_low ? color.red : color.gray
+plot(volume, color = color.new(palette,30), style=plot.style_columns, title="Volume")
+
+
+l1 = plot(vol_high_level, color = color.new(color.green,65), title = "High Volume Level")
+l2 = plot(vol_low_level,  color = color.new(color.red,65),   title = "Low Volume Level")
+
+
+fill(l1, l2, color.new(color.blue, 75))
+
+
+////////////
+// ALERTS //
+
+
+if (vol_is_high)
+    alert("Volume is Too High!")
+
+
+if (vol_is_low)
+    alert("Volume is Too Low!")
+

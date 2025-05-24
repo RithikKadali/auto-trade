@@ -1,0 +1,47 @@
+//@version=5
+indicator(title="updated linreg + 50/200 EMA", shorttitle="updated LinReg Candles with EMAs", format=format.price, precision=4, overlay=true)
+
+
+// Input parameters
+signal_length = input.int(title="Signal Smoothing", minval=1, maxval=200, defval=7)
+sma_signal = input.bool(title="Simple MA (Signal Line)", defval=true)
+lin_reg = input.bool(title="Lin Reg", defval=true)
+linreg_length = input.int(title="Linear Regression Length", minval=1, maxval=200, defval=11)
+
+
+// EMA periods
+ema50_length = input.int(title="50-period EMA Length", defval=50)
+ema200_length = input.int(title="200-period EMA Length", defval=200)
+
+
+// Linear Regression calculations
+bopen = lin_reg ? ta.linreg(open, linreg_length, 0) : open
+bhigh = lin_reg ? ta.linreg(high, linreg_length, 0) : high
+blow = lin_reg ? ta.linreg(low, linreg_length, 0) : low
+bclose = lin_reg ? ta.linreg(close, linreg_length, 0) : close
+
+
+r = bopen < bclose
+
+
+// Signal line
+signal = sma_signal ? ta.sma(bclose, signal_length) : ta.ema(bclose, signal_length)
+
+
+// Plot LinReg candles
+plotcandle(r ? bopen : na, r ? bhigh : na, r ? blow : na, r ? bclose : na, title="Bullish LinReg Candles", color=color.rgb(57, 162, 60, 45), wickcolor=color.green, bordercolor=color.green)
+plotcandle(r ? na : bopen, r ? na : bhigh, r ? na : blow, r ? na : bclose, title="Bearish LinReg Candles", color=color.rgb(255, 82, 82, 49), wickcolor=color.red, bordercolor=color.red)
+
+
+// Plot signal line
+plot(signal, color=color.white, title="Signal Line")
+
+
+// Calculate and plot EMAs
+ema50 = ta.ema(close, ema50_length)
+ema200 = ta.ema(close, ema200_length)
+
+
+plot(ema50, color=color.rgb(76, 175, 79), title="50-period EMA")
+plot(ema200, color=color.red, title="200-period EMA")
+
