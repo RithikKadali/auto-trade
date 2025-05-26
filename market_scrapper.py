@@ -225,7 +225,7 @@ def monitor_market():
         df_log.to_csv(log_file, mode='a', index=False, header=False)
 
     log_file_2 = "market_analysis_log_2.csv"
-    if ((all(buy_conditions) or all(sell_conditions)) and prevRecommendation == "HOLD / AVOID"):
+    if (recommendation != prevRecommendation):
         if not os.path.exists(log_file_2):
             df_log.to_csv(log_file_2, index=False)
         else:
