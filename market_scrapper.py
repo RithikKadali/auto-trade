@@ -179,13 +179,26 @@ def monitor_market():
 
 
     # Save to CSV (Structured Log)
+    # Determine recommendation for logging
+    recommendation = (
+        "BUY" if all(buy_conditions) else
+        "SELL" if all(sell_conditions) else
+        "HOLD / AVOID"
+    )
+
+    # Save to CSV (Structured Log)
     log_file = "market_analysis_log.csv"
     df_log_entry = {
         "Datetime": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
-        "Nifty50": [f"{close:.2f}"],  # Store as a formatted string instead of raw float
+        "Nifty50": [f"{close:.2f}"],  # Store as a formatted string
 
         "EMA Signal": [signal],
+        "EMA7 Value": [f"{ema7:.2f}"],
+
         "Candle Color": [candle_color],
+        "Linear Regression Open": [f"{lin_open:.2f}"],
+        "Linear Regression Close": [f"{lin_close:.2f}"],
+
         "Candle vs EMA7": [
             "Above EMA7" if lin_close > ema7 else
             "Below EMA7" if lin_close < ema7 else
@@ -197,8 +210,7 @@ def monitor_market():
         "Market Condition": [
             "Sideways (−10 to +10)" if macd_sideways else "Trending"
         ],
-        "Buy": [""],
-        "Sell": [""],
+        "Recommendation": [recommendation],
         "Profit/Loss": [""]
     }
 
@@ -230,11 +242,17 @@ def monitor_market():
 
     # Candle Info
     result.append(f"🕯️ Candle Analysis\n🟢 Type : {candle_color}")
+    result.append(f"📏 Linear Regression Open: ₹{lin_open:.2f}")
+    result.append(f"📏 Linear Regression Close: ₹{lin_close:.2f}")
+
+
+   
     result.append("—" * 10)
 
     # EMA7 Position
     result.append(f"📐 Position Relative to EMA7\n➡️ {candle_vs_white_line}")
-    result.append("—" * 10)
+    result.append(f"📊 EMA7 Value: ₹{ema7:.2f}")
+
 
     # Signal line with datetime
     if all(buy_conditions):
@@ -257,7 +275,7 @@ if __name__ == "__main__":
     while True:
         try:
             monitor_market()
-            time.sleep(300)
+            time.sleep(30)
         except KeyboardInterrupt:
             print("\n🛑 Monitoring stopped by user.")
             break
