@@ -48,7 +48,7 @@ def linreg(series, length):
 # -------------------------------
 # Market Monitoring Function
 # -------------------------------
-
+prevRecommendation = ""
 def monitor_market():
     df = yf.download('^NSEI', period='7d', interval='5m', progress=False)
     df.dropna(inplace=True)
@@ -214,13 +214,24 @@ def monitor_market():
         "Profit/Loss": [""]
     }
 
+    global prevRecommendation
+    
     df_log = pd.DataFrame(df_log_entry)
+#        if ((all(buy_conditions) or all(sell_conditions)) and prevRecommendation == "HOLD / AVOID"):
 
     if not os.path.exists(log_file):
         df_log.to_csv(log_file, index=False)
     else:
         df_log.to_csv(log_file, mode='a', index=False, header=False)
 
+    log_file_2 = "market_analysis_log_2.csv"
+    if ((all(buy_conditions) or all(sell_conditions)) and prevRecommendation == "HOLD / AVOID"):
+        if not os.path.exists(log_file_2):
+            df_log.to_csv(log_file_2, index=False)
+        else:
+            df_log.to_csv(log_file_2, mode='a', index=False, header=False)
+    
+    prevRecommendation = recommendation
     print("=" * 80)
 
     
@@ -275,7 +286,7 @@ if __name__ == "__main__":
     while True:
         try:
             monitor_market()
-            time.sleep(30)
+            time.sleep(2)
         except KeyboardInterrupt:
             print("\n🛑 Monitoring stopped by user.")
             break
