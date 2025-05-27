@@ -4,7 +4,7 @@ import pandas as pd
 import time
 import os
 from datetime import datetime
-
+buy_sell=None
 # -------------------------------
 # Technical Indicator Calculations
 # -------------------------------
@@ -48,7 +48,7 @@ def linreg(series, length):
 # -------------------------------
 # Market Monitoring Function
 # -------------------------------
-
+prevRecommendation = ""
 def monitor_market():
     df = yf.download('^NSEI', period='7d', interval='5m', progress=False)
     df.dropna(inplace=True)
@@ -204,6 +204,9 @@ def monitor_market():
             "Below EMA7" if lin_close < ema7 else
             "At EMA7"
         ],
+
+        #add ema7 value
+        "EMA7":[f"{ema7:.2f}"],
         "MACD State": [histo_state],
         "MACD Bar": [f"{latest_sh:.6f}"], 
 
@@ -214,14 +217,73 @@ def monitor_market():
         "Profit/Loss": [""]
     }
 
+    global prevRecommendation
+    
     df_log = pd.DataFrame(df_log_entry)
+#        if ((all(buy_conditions) or all(sell_conditions)) and prevRecommendation == "HOLD / AVOID"):
 
     if not os.path.exists(log_file):
         df_log.to_csv(log_file, index=False)
     else:
         df_log.to_csv(log_file, mode='a', index=False, header=False)
 
+    log_file_2 = "market_analysis_log_2.csv"
+    if (recommendation != prevRecommendation):
+        if not os.path.exists(log_file_2):
+            df_log.to_csv(log_file_2, index=False)
+        else:
+            df_log.to_csv(log_file_2, mode='a', index=False, header=False)
+    
+    prevRecommendation = recommendation
     print("=" * 80)
+##############################################################
+    filter_table_file = "market_filter_table.csv"
+
+    candle_vs_ema7 = (
+        "Above EMA7" if lin_close > ema7 else
+        "Below EMA7" if lin_close < ema7 else
+        "At EMA7"
+    )
+
+    market_condition_str = (
+        "Sideways (−10 to +10)" if macd_sideways else "Trending"
+    )
+    global buy_sell
+    # Determine Buy/Sell Signal
+    if (
+        candle_color == "Green (Bullish)" and
+        not macd_sideways and
+        candle_vs_ema7 == "Above EMA7"
+    ):
+        buy_sell = "BUY"
+    elif (
+        candle_color == "Red (Bearish)" and
+        not macd_sideways and
+        candle_vs_ema7 == "Below EMA7"
+    ):
+        buy_sell = "SELL"
+    else:
+        buy_sell = "HOLD / AVOID"
+
+    df_filter_entry = {
+        "Datetime": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+        "Nifty50": [f"{close:.2f}"],
+        "Candle Color": [candle_color],
+        "Market Condition": [market_condition_str],
+        "Candle vs EMA7": [candle_vs_ema7],
+        "Buy/Sell": [buy_sell]
+    }
+
+    df_filter = pd.DataFrame(df_filter_entry)
+
+    if not os.path.exists(filter_table_file):
+        df_filter.to_csv(filter_table_file, index=False)
+    else:
+        df_filter.to_csv(filter_table_file, mode='a', index=False, header=False)
+
+
+
+###############################################################
 
     
     # Build result string instead of printing in bot
@@ -267,6 +329,10 @@ def monitor_market():
     return "\n".join(result)
 
 
+def get_buy_sell():
+    print("buy_sell:its considering all condiation need to check only Candle color chaning", buy_sell)
+    return buy_sell
+
 # -------------------------------
 # Main Loop
 # -------------------------------
@@ -275,7 +341,8 @@ if __name__ == "__main__":
     while True:
         try:
             monitor_market()
-            time.sleep(30)
+            get_buy_sell()
+            time.sleep(300)
         except KeyboardInterrupt:
             print("\n🛑 Monitoring stopped by user.")
             break
