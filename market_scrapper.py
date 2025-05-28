@@ -237,8 +237,8 @@ def monitor_market():
     prevRecommendation = recommendation
     print("=" * 80)
 ##############################################################
-    filter_table_file = "market_filter_table.csv"
-
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    filter_table_file = f"market_filter_table_{date_str}.csv"
     candle_vs_ema7 = (
         "Above EMA7" if lin_close > ema7 else
         "Below EMA7" if lin_close < ema7 else
@@ -252,14 +252,14 @@ def monitor_market():
     # Determine Buy/Sell Signal
     if (
         candle_color == "Green (Bullish)" and
-        not macd_sideways and
-        candle_vs_ema7 == "Above EMA7"
+        not macd_sideways #and
+       # candle_vs_ema7 == "Above EMA7"
     ):
         buy_sell = "BUY"
     elif (
         candle_color == "Red (Bearish)" and
-        not macd_sideways and
-        candle_vs_ema7 == "Below EMA7"
+        not macd_sideways #and
+        #candle_vs_ema7 == "Below EMA7"
     ):
         buy_sell = "SELL"
     else:
@@ -270,7 +270,7 @@ def monitor_market():
         "Nifty50": [f"{close:.2f}"],
         "Candle Color": [candle_color],
         "Market Condition": [market_condition_str],
-        "Candle vs EMA7": [candle_vs_ema7],
+        #"Candle vs EMA7": [candle_vs_ema7],
         "Buy/Sell": [buy_sell]
     }
 
