@@ -5,7 +5,7 @@ import time
 import os
 from datetime import datetime
 buy_sell=None
-os.makedirs("log_exit", exist_ok=True)
+os.makedirs("logs_exit", exist_ok=True)
 
 # -------------------------------
 # Technical Indicator Calculations
