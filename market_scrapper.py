@@ -190,7 +190,7 @@ def monitor_market():
 
     # Save to CSV (Structured Log)
     date_str = datetime.now().strftime('%Y-%m-%d')
-    log_file = f"{date_str}_full_market_analysis_log.csv"  
+    log_file = f"logs/{date_str}_full_market_analysis_log.csv" 
   
     df_log_entry = {
         "Datetime": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
@@ -234,7 +234,7 @@ def monitor_market():
 
     #to remove duplicate values
     date_str = datetime.now().strftime('%Y-%m-%d')
-    log_file_2 = f"{date_str}_market_analysis_log_2_by_prasanna.csv"
+    log_file_2 = f"logs/{date_str}_market_analysis_log_2_by_prasanna.csv"
    
     if (recommendation != prevRecommendation):
         if not os.path.exists(log_file_2):
@@ -246,7 +246,7 @@ def monitor_market():
     print("=" * 80)
 ##############################################################
     date_str = datetime.now().strftime('%Y-%m-%d')
-    filter_table_file = f"{date_str}_market_filter_table_entry_log.csv"
+    filter_table_file = f"logs/{date_str}_market_filter_table_entry_log.csv"
 
     candle_vs_ema7 = (
         "Above EMA7" if lin_close > ema7 else
