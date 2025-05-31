@@ -5,6 +5,8 @@ import time
 import os
 from datetime import datetime
 buy_sell=None
+os.makedirs("logs", exist_ok=True)
+
 # -------------------------------
 # Technical Indicator Calculations
 # -------------------------------
@@ -187,7 +189,9 @@ def monitor_market():
     )
 
     # Save to CSV (Structured Log)
-    log_file = "market_analysis_log.csv"
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    log_file = f"{date_str}_full_market_analysis_log.csv"  
+  
     df_log_entry = {
         "Datetime": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
         "Nifty50": [f"{close:.2f}"],  # Store as a formatted string
@@ -227,7 +231,11 @@ def monitor_market():
     else:
         df_log.to_csv(log_file, mode='a', index=False, header=False)
 
-    log_file_2 = "market_analysis_log_2.csv"
+
+    #to remove duplicate values
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    log_file_2 = f"{date_str}_market_analysis_log_2_by_prasanna.csv"
+   
     if (recommendation != prevRecommendation):
         if not os.path.exists(log_file_2):
             df_log.to_csv(log_file_2, index=False)
@@ -238,7 +246,8 @@ def monitor_market():
     print("=" * 80)
 ##############################################################
     date_str = datetime.now().strftime('%Y-%m-%d')
-    filter_table_file = f"market_filter_table_{date_str}.csv"
+    filter_table_file = f"{date_str}_market_filter_table_entry_log.csv"
+
     candle_vs_ema7 = (
         "Above EMA7" if lin_close > ema7 else
         "Below EMA7" if lin_close < ema7 else
@@ -252,14 +261,14 @@ def monitor_market():
     # Determine Buy/Sell Signal
     if (
         candle_color == "Green (Bullish)" and
-        not macd_sideways #and
-       # candle_vs_ema7 == "Above EMA7"
+        not macd_sideways and
+        candle_vs_ema7 == "Above EMA7"
     ):
         buy_sell = "BUY"
     elif (
         candle_color == "Red (Bearish)" and
-        not macd_sideways #and
-        #candle_vs_ema7 == "Below EMA7"
+        not macd_sideways and
+        candle_vs_ema7 == "Below EMA7"
     ):
         buy_sell = "SELL"
     else:
@@ -270,7 +279,7 @@ def monitor_market():
         "Nifty50": [f"{close:.2f}"],
         "Candle Color": [candle_color],
         "Market Condition": [market_condition_str],
-        #"Candle vs EMA7": [candle_vs_ema7],
+        "Candle vs EMA7": [candle_vs_ema7],
         "Buy/Sell": [buy_sell]
     }
 
