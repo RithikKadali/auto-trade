@@ -1,0 +1,360 @@
+import yfinance as yf
+import numpy as np
+import pandas as pd
+import time
+import os
+from datetime import datetime
+buy_sell=None
+os.makedirs("logs_exit", exist_ok=True)
+
+# -------------------------------
+# Technical Indicator Calculations
+# -------------------------------
+
+def calc_smma(series, length):
+    smma = series.copy()
+    smma.iloc[:length] = series.iloc[:length].mean()
+    for i in range(length, len(series)):
+        smma.iloc[i] = (smma.iloc[i - 1] * (length - 1) + series.iloc[i]) / length
+    return smma
+
+def calc_zlema(series, length):
+    ema1 = series.ewm(span=length, adjust=False).mean()
+    ema2 = ema1.ewm(span=length, adjust=False).mean()
+    return ema1 + (ema1 - ema2)
+
+def calculate_impulse_macd(df, lengthMA=34, lengthSignal=9):
+    src = (df['High'] + df['Low'] + df['Close']) / 3
+    hi = calc_smma(df['High'], lengthMA)
+    lo = calc_smma(df['Low'], lengthMA)
+    mi = calc_zlema(src, lengthMA)
+
+    md = np.where(mi > hi, mi - hi,
+                  np.where(mi < lo, mi - lo, 0))
+
+    md_series = pd.Series(md.ravel(), index=df.index)
+    sb = md_series.rolling(window=lengthSignal).mean()
+    sh = md_series - sb
+    return md_series, sb, sh
+
+def linreg(series, length):
+    idx = np.arange(length)
+    def calc(i):
+        y = series[i - length + 1: i + 1]
+        if len(y) < length:
+            return np.nan
+        slope, intercept = np.polyfit(idx, y, 1)
+        return intercept + slope * (length - 1)
+    return [np.nan if i < length - 1 else calc(i) for i in range(len(series))]
+
+# -------------------------------
+# Market Monitoring Function
+# -------------------------------
+prevRecommendation = ""
+def monitor_market():
+    df = yf.download('^NSEI', period='7d', interval='5m', progress=False)
+    df.dropna(inplace=True)
+
+    md, sb, sh = calculate_impulse_macd(df)
+    latest_sh = sh.iloc[-1]
+    histo_state = "Positive" if latest_sh > 0 else "Negative" if latest_sh < 0 else "Zero"
+    macd_sideways = -10 <= latest_sh <= 10
+
+    df['EMA7'] = df['Close'].ewm(span=7, adjust=False).mean()
+    df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
+    df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
+
+    linreg_len = 11
+    df['lin_open'] = linreg(df['Open'], linreg_len)
+    df['lin_close'] = linreg(df['Close'], linreg_len)
+
+    latest = df.iloc[[-1]]
+    close = float(latest['Close'].iloc[0])
+    ema7 = float(latest['EMA7'].iloc[0])
+    ema50 = float(latest['EMA50'].iloc[0])
+    ema200 = float(latest['EMA200'].iloc[0])
+    lin_open = float(latest['lin_open'].iloc[0])
+    lin_close = float(latest['lin_close'].iloc[0])
+
+    candle_vs_white_line = (
+        "Candle is above the 7 EMA (Bullish / Uptrend)" if lin_close > ema7 else
+        "Candle is below the 7 EMA (Bearish / Downtrend)" if lin_close < ema7 else
+        "Candle is at the 7 EMA"
+    )
+
+    ema_touching_candle = (
+        "Yes, 7 EMA is touching the candle (between linear open and close)"
+        if min(lin_open, lin_close) <= ema7 <= max(lin_open, lin_close)
+        else "No, 7 EMA is not touching the candle"
+    )
+
+    signal = "Golden Cross (Bullish)" if ema50 > ema200 else \
+             "Death Cross (Bearish)" if ema50 < ema200 else "Neutral"
+
+    candle_color = "Green (Bullish)" if lin_close > lin_open else \
+                   "Red (Bearish)" if lin_close < lin_open else "Doji (Neutral)"
+
+    candle_strength_pct = abs(lin_close - lin_open) / close * 100
+    strength_threshold_strong = 0.5
+    strength_threshold_weak = 0.1
+
+    if candle_strength_pct >= strength_threshold_strong:
+        candle_strength = f"Very Strong Candle ({candle_strength_pct:.2f}%)"
+    elif candle_strength_pct <= strength_threshold_weak:
+        candle_strength = f"Weak Candle ({candle_strength_pct:.2f}%)"
+    else:
+        candle_strength = f"Moderate Strength Candle ({candle_strength_pct:.2f}%)"
+
+    ema50_slope = np.polyfit(range(10), df['EMA50'].iloc[-10:], 1)[0]
+    ema200_slope = np.polyfit(range(10), df['EMA200'].iloc[-10:], 1)[0]
+    ema_distance_pct = abs(ema50 - ema200) / ema200 * 100
+
+    if abs(ema50_slope) < 0.02 and abs(ema200_slope) < 0.02 and ema_distance_pct < 1:
+        ema_status = "Sideways and close to each other"
+    elif ema_distance_pct < 1:
+        ema_status = "Close to each other but with movement"
+    else:
+        ema_status = "EMAs showing divergence or trend"
+
+    ema7_slope = np.polyfit(range(10), df['EMA7'].iloc[-10:], 1)[0]
+    ema7_sideways = abs(ema7_slope) < 0.02
+
+    # Beautified Output
+    print("=" * 80)
+    print(f"📊  Market Analysis — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 80)
+
+    print("\n📈 Price & EMA Overview")
+    print("-" * 80)
+    print(f"🔹 Latest Close Price : ₹{close:.2f}")
+    print(f"🔸 EMA7 : {ema7:.2f}   |   EMA50 : {ema50:.2f}   |   EMA200 : {ema200:.2f}")
+    print(f"📍 EMA Signal : {signal}")
+    print(f"🔄 EMA 50/200 Trend : {ema_status}")
+
+    print("\n🕯️ Candle Analysis")
+    print("-" * 80)
+    print(f"🟢 Type     : {candle_color}")
+    print(f"💪 Strength : {candle_strength}")
+
+    print("\n📐 Position Relative to EMA7")
+    print("-" * 80)
+    print(f"➡️ {candle_vs_white_line}")
+    print(f"🤝 EMA Touching Candle? : {ema_touching_candle}")
+    print(f"📊 EMA7 Slope : {'📏 Sideways' if ema7_sideways else '📈 Trending'}")
+
+    print("\n💹 Impulse MACD Histogram")
+    print("-" * 80)
+    print(f"🧭 State : {histo_state} ({latest_sh:.6f})")
+    print(f"📉 Market Condition : {'🔁 Sideways (−10 to +10)' if macd_sideways else '📊 Trending'}")
+
+    print("\n📢 Trade Recommendations")
+    print("-" * 80)
+    # -------------------------------
+    # Entry Conditions for Buy/Sell
+    # -------------------------------
+
+    # BUY Entry Conditions:
+    buy_conditions = [
+        not macd_sideways,              # MACD trending
+        latest_sh > 0,                  # MACD state positive
+        candle_color == "Green (Bullish)",  # Green candle
+        lin_close > ema7                # Candle above EMA7
+    ]
+
+    # SELL Entry Conditions:
+    sell_conditions = [
+        not macd_sideways,              # MACD trending
+        latest_sh < 0,                  # MACD state negative
+        candle_color == "Red (Bearish)",    # Red candle
+        lin_close < ema7                # Candle below EMA7
+    ]
+
+    if all(buy_conditions):
+        print("✅ BUY Signal: MACD trending & positive, green candle above EMA7")
+    elif all(sell_conditions):
+        print("🔻 SELL Signal: MACD trending & negative, red candle below EMA7")
+    elif candle_color == "Doji (Neutral)" or ema7_sideways or macd_sideways:
+        print("⏸️ HOLD / AVOID: Sideways market or unclear signal")
+    else:
+        print("⚠️ No clear entry signal. Wait for stronger confirmation.")
+
+
+
+    # Save to CSV (Structured Log)
+    # Determine recommendation for logging
+    recommendation = (
+        "BUY" if all(buy_conditions) else
+        "SELL" if all(sell_conditions) else
+        "HOLD / AVOID"
+    )
+
+    # Save to CSV (Structured Log)
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    log_file = f"logs_exit/{date_str}_full_market_analysis_log.csv" 
+  
+    df_log_entry = {
+        "Datetime": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+        "Nifty50": [f"{close:.2f}"],  # Store as a formatted string
+
+        "EMA Signal": [signal],
+        "EMA7 Value": [f"{ema7:.2f}"],
+
+        "Candle Color": [candle_color],
+        "Linear Regression Open": [f"{lin_open:.2f}"],
+        "Linear Regression Close": [f"{lin_close:.2f}"],
+
+        "Candle vs EMA7": [
+            "Above EMA7" if lin_close > ema7 else
+            "Below EMA7" if lin_close < ema7 else
+            "At EMA7"
+        ],
+
+        #add ema7 value
+        "EMA7":[f"{ema7:.2f}"],
+        "MACD State": [histo_state],
+        "MACD Bar": [f"{latest_sh:.6f}"], 
+
+        "Market Condition": [
+            "Sideways (−10 to +10)" if macd_sideways else "Trending"
+        ],
+        "Recommendation": [recommendation],
+        "Profit/Loss": [""]
+    }
+
+    global prevRecommendation
+    
+    df_log = pd.DataFrame(df_log_entry)
+#        if ((all(buy_conditions) or all(sell_conditions)) and prevRecommendation == "HOLD / AVOID"):
+
+    if not os.path.exists(log_file):
+        df_log.to_csv(log_file, index=False)
+    else:
+        df_log.to_csv(log_file, mode='a', index=False, header=False)
+
+
+    #to remove duplicate values
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    log_file_2 = f"logs_exit/{date_str}_market_analysis_log_2_by_prasanna.csv"
+   
+    if (recommendation != prevRecommendation):
+        if not os.path.exists(log_file_2):
+            df_log.to_csv(log_file_2, index=False)
+        else:
+            df_log.to_csv(log_file_2, mode='a', index=False, header=False)
+    
+    prevRecommendation = recommendation
+    print("=" * 80)
+##############################################################
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    filter_table_file = f"logs_exit/{date_str}_market_filter_table_entry_log.csv"
+
+    candle_vs_ema7 = (
+        "Above EMA7" if lin_close > ema7 else
+        "Below EMA7" if lin_close < ema7 else
+        "At EMA7"
+    )
+
+    market_condition_str = (
+        "Sideways (−10 to +10)" if macd_sideways else "Trending"
+    )
+    global buy_sell
+    # Determine Buy/Sell Signal
+    if (
+        candle_color == "Green (Bullish)" and
+        not macd_sideways and
+        candle_vs_ema7 == "Above EMA7"
+    ):
+        buy_sell = "BUY"
+    elif (
+        candle_color == "Red (Bearish)" and
+        not macd_sideways and
+        candle_vs_ema7 == "Below EMA7"
+    ):
+        buy_sell = "SELL"
+    else:
+        buy_sell = "HOLD / AVOID"
+
+    df_filter_entry = {
+        "Datetime": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+        "Nifty50": [f"{close:.2f}"],
+        "Candle Color": [candle_color],
+        "Market Condition": [market_condition_str],
+        "Candle vs EMA7": [candle_vs_ema7],
+        "Buy/Sell": [buy_sell]
+    }
+
+    df_filter = pd.DataFrame(df_filter_entry)
+
+    if not os.path.exists(filter_table_file):
+        df_filter.to_csv(filter_table_file, index=False)
+    else:
+        df_filter.to_csv(filter_table_file, mode='a', index=False, header=False)
+
+
+
+###############################################################
+
+    
+    # Build result string instead of printing in bot
+    # Build result string instead of printing
+    result = []
+
+    # Timestamp
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Header
+    result.append(f"🕒 Datetime: {now_str}")
+    result.append(f"🔹 Latest Close Price : ₹{close:.2f}")
+    result.append("—" * 10)
+
+    # MACD Info
+    result.append(f"💹 Impulse MACD Histogram\n🧭 State : {histo_state} ({latest_sh:.6f})\n📉 Market Condition : {'🔁 Sideways (−10 to +10)' if macd_sideways else '📊 Trending'}")
+    result.append("—" * 10)
+
+    # Candle Info
+    result.append(f"🕯️ Candle Analysis\n🟢 Type : {candle_color}")
+    result.append(f"📏 Linear Regression Open: ₹{lin_open:.2f}")
+    result.append(f"📏 Linear Regression Close: ₹{lin_close:.2f}")
+
+
+   
+    result.append("—" * 10)
+
+    # EMA7 Position
+    result.append(f"📐 Position Relative to EMA7\n➡️ {candle_vs_white_line}")
+    result.append(f"📊 EMA7 Value: ₹{ema7:.2f}")
+
+
+    # Signal line with datetime
+    if all(buy_conditions):
+        result.append(f"🕒 {now_str} \n✅ BUY Signal: MACD trending & positive, green candle above EMA7")
+    elif all(sell_conditions):
+        result.append(f"🕒 {now_str} \n🔻 SELL Signal: MACD trending & negative, red candle below EMA7")
+    elif candle_color == "Doji (Neutral)" or ema7_sideways or macd_sideways:
+        result.append(f"🕒 {now_str} \n⏸️ HOLD / AVOID: Sideways market or unclear signal")
+    else:
+        result.append(f"🕒 {now_str} — ⚠️ No clear entry signal. Wait for stronger confirmation.")
+
+    return "\n".join(result)
+
+
+def get_buy_sell():
+    print("buy_sell:its considering all condiation need to check only Candle color chaning", buy_sell)
+    return buy_sell
+
+# -------------------------------
+# Main Loop
+# -------------------------------
+
+if __name__ == "__main__":
+    while True:
+        try:
+            monitor_market()
+            get_buy_sell()
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n🛑 Monitoring stopped by user.")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            time.sleep(3)
